@@ -2,8 +2,27 @@ import telebot
 from rembg import remove
 from PIL import Image
 import io
+import os
+from flask import Flask
+from threading import Thread
 
-# Đã nạp Token của anh Duy vào đây
+# --- ĐOẠN CODE "MẸO" ĐỂ VƯỢT LỖI RENDER ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot đang chạy ngon lành!"
+
+def run():
+    # Render yêu cầu chạy trên port 10000 hoặc port hệ thống cấp
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+# ------------------------------------------
+
 TOKEN = '8819000463:AAEPXP-1NEm6o9fBCNZTToWg2LIU42g7LoU'
 BACKGROUND_PATH = 'IMG_202606271421010.JPG' 
 
@@ -46,5 +65,8 @@ def handle_photo(message):
     except Exception as e:
         bot.reply_to(message, f"Gặp lỗi rồi anh ơi: {str(e)}")
 
-print("Bot đang chạy...")
-bot.polling()
+if __name__ == "__main__":
+    # Kích hoạt cổng web ảo trước khi bật bot
+    keep_alive()
+    print("Bot đang chạy...")
+    bot.polling()
