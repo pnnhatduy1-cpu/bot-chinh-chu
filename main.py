@@ -29,6 +29,10 @@ BACKGROUND_PATH = 'IMG_202606271421010.JPG'
 
 bot = telebot.TeleBot(TOKEN)
 
+# KHỞI TẠO AI SẴN Ở ĐÂY (Chỉ chạy 1 lần duy nhất khi bật bot để tiết kiệm RAM tối đa)
+print("Đang nạp bộ não AI u2netp...")
+sess = new_session("u2netp")
+
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     bot.reply_to(message, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
@@ -40,9 +44,8 @@ def handle_photo(message):
         
         input_image = Image.open(io.BytesIO(downloaded_file))
         
-        # Khởi tạo model siêu nhẹ u2netp chuẩn cấu hình hệ thống
-        print("Đang bóc tách nền bằng AI...")
-        sess = new_session("u2netp")
+        # Sử dụng ngay session AI đã nạp sẵn, không mất thời gian khởi tạo lại
+        print("Đang bóc tách nền...")
         subject_image = remove(input_image, session=sess) 
         
         print("Đang dán chủ thể vào phôi nền...")
@@ -70,7 +73,7 @@ def handle_photo(message):
         bio.seek(0)
         
         bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥")
-        print(f"Xử lý thành công trong {time.time() - start_time:.2s} giây!")
+        print(f"Xử lý thành công trong {time.time() - start_time:.2f} giây!")
         
         # Giải phóng bộ nhớ
         del input_image, subject_image, bg_image, subject_resized, final_image
