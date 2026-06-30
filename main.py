@@ -3,7 +3,8 @@ from rembg import remove, new_session
 from PIL import Image
 import io
 import os
-import gc  # Thư viện dọn rác bộ nhớ
+import gc
+import time
 from flask import Flask
 from threading import Thread
 
@@ -28,21 +29,23 @@ BACKGROUND_PATH = 'IMG_202606271421010.JPG'
 
 bot = telebot.TeleBot(TOKEN)
 
-# Khởi tạo session AI bản siêu nhẹ để tiết kiệm RAM tối đa
-session = new_session("u2netp")
-
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     bot.reply_to(message, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
     try:
+        start_time = time.time()
+        
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
         input_image = Image.open(io.BytesIO(downloaded_file))
         
-        # Áp dụng bản AI siêu nhẹ đã khởi tạo
-        subject_image = remove(input_image, session=session) 
+        # Khởi tạo model siêu nhẹ u2netp chuẩn cấu hình hệ thống
+        print("Đang bóc tách nền bằng AI...")
+        sess = new_session("u2netp")
+        subject_image = remove(input_image, session=sess) 
         
+        print("Đang dán chủ thể vào phôi nền...")
         bg_image = Image.open(BACKGROUND_PATH).convert("RGBA")
         
         target_height = int(bg_image.height * 0.7)
@@ -67,12 +70,14 @@ def handle_photo(message):
         bio.seek(0)
         
         bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥")
+        print(f"Xử lý thành công trong {time.time() - start_time:.2s} giây!")
         
-        # Giải phóng bộ nhớ ngay lập tức sau khi xử lý xong
+        # Giải phóng bộ nhớ
         del input_image, subject_image, bg_image, subject_resized, final_image
         gc.collect()
         
     except Exception as e:
+        print(f"Lỗi rồi: {str(e)}")
         bot.reply_to(message, f"Gặp lỗi rồi anh ơi: {str(e)}")
 
 if __name__ == "__main__":
