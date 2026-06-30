@@ -1,10 +1,8 @@
 import telebot
-from rembg import remove, new_session
+import requests
 from PIL import Image
 import io
 import os
-import gc
-import time
 from flask import Flask
 from threading import Thread
 
@@ -13,7 +11,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot đang chạy ngon lành!"
+    return "Bot hoạt động mượt mà không tốn RAM!"
 
 def run():
     port = int(os.environ.get("PORT", 10000))
@@ -27,28 +25,35 @@ def keep_alive():
 TOKEN = '8819000463:AAEPXP-1NEm6o9fBCNZTToWg2LIU42g7LoU'
 BACKGROUND_PATH = 'IMG_202606271421010.JPG' 
 
-bot = telebot.TeleBot(TOKEN)
+# ĐÃ TÍCH HỢP API KEY CỦA ANH DUY
+REMOVE_BG_API_KEY = 'HVG9v7WgM7hv2RCzkzSabmww'
 
-# KHỞI TẠO AI SẴN Ở ĐÂY (Chỉ chạy 1 lần duy nhất khi bật bot để tiết kiệm RAM tối đa)
-print("Đang nạp bộ não AI u2netp...")
-sess = new_session("u2netp")
+bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     bot.reply_to(message, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
     try:
-        start_time = time.time()
-        
+        # 1. Tải ảnh từ Telegram
         file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
+        file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
         
-        input_image = Image.open(io.BytesIO(downloaded_file))
+        # 2. Gọi API ngoài tách nền hộ (Không tốn RAM của Render)
+        print("Đang gửi ảnh sang hệ thống tách nền...")
+        response = requests.post(
+            'https://api.remove.bg/v1.0/removebg',
+            data={'image_url': file_url, 'size': 'auto'},
+            headers={'X-API-Key': REMOVE_BG_API_KEY},
+        )
         
-        # Sử dụng ngay session AI đã nạp sẵn, không mất thời gian khởi tạo lại
-        print("Đang bóc tách nền...")
-        subject_image = remove(input_image, session=sess) 
-        
-        print("Đang dán chủ thể vào phôi nền...")
+        if response.status_code == 200:
+            subject_image = Image.open(io.BytesIO(response.content))
+        else:
+            bot.reply_to(message, "Lỗi hệ thống tách nền, anh kiểm tra tài khoản Remove.bg nhé!")
+            return
+
+        # 3. Tiến hành ghép phôi nền như cũ
+        print("Đang dán vào phôi nền...")
         bg_image = Image.open(BACKGROUND_PATH).convert("RGBA")
         
         target_height = int(bg_image.height * 0.7)
@@ -73,18 +78,12 @@ def handle_photo(message):
         bio.seek(0)
         
         bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥")
-        print(f"Xử lý thành công trong {time.time() - start_time:.2f} giây!")
-        
-        # Giải phóng bộ nhớ
-        del input_image, subject_image, bg_image, subject_resized, final_image
-        gc.collect()
+        print("Xử lý thành công hoàn toàn!")
         
     except Exception as e:
-        print(f"Lỗi rồi: {str(e)}")
         bot.reply_to(message, f"Gặp lỗi rồi anh ơi: {str(e)}")
 
 if __name__ == "__main__":
     keep_alive()
-    print("Cổng mạng Render đã mở thành công!")
-    print("Bot đang chạy...")
+    print("Bot đang sẵn sàng lắng nghe...")
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
