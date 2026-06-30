@@ -1,12 +1,13 @@
 import telebot
-from rembg import remove
+from rembg import remove, new_session
 from PIL import Image
 import io
 import os
+import gc  # Thư viện dọn rác bộ nhớ
 from flask import Flask
 from threading import Thread
 
-# --- ĐOẠN CODE "MẸO" ĐỂ VƯỢT LỖI RENDER ---
+# --- CẤU HÌNH WEB ẢO CHO RENDER ---
 app = Flask('')
 
 @app.route('/')
@@ -14,29 +15,33 @@ def home():
     return "Bot đang chạy ngon lành!"
 
 def run():
-    # Render yêu cầu chạy trên port 10000 hoặc port hệ thống cấp
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
-# ------------------------------------------
+# ----------------------------------
 
 TOKEN = '8819000463:AAEPXP-1NEm6o9fBCNZTToWg2LIU42g7LoU'
 BACKGROUND_PATH = 'IMG_202606271421010.JPG' 
 
 bot = telebot.TeleBot(TOKEN)
 
+# Khởi tạo session AI bản siêu nhẹ để tiết kiệm RAM tối đa
+session = new_session("u2netp")
+
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    bot.reply_to(message, "Đang xử lý tách nền và phối vào khung 'Đàn Ông Chỉnh Chu'...")
+    bot.reply_to(message, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
         input_image = Image.open(io.BytesIO(downloaded_file))
-        subject_image = remove(input_image) 
+        
+        # Áp dụng bản AI siêu nhẹ đã khởi tạo
+        subject_image = remove(input_image, session=session) 
         
         bg_image = Image.open(BACKGROUND_PATH).convert("RGBA")
         
@@ -62,11 +67,16 @@ def handle_photo(message):
         bio.seek(0)
         
         bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥")
+        
+        # Giải phóng bộ nhớ ngay lập tức sau khi xử lý xong
+        del input_image, subject_image, bg_image, subject_resized, final_image
+        gc.collect()
+        
     except Exception as e:
         bot.reply_to(message, f"Gặp lỗi rồi anh ơi: {str(e)}")
 
 if __name__ == "__main__":
-    # Kích hoạt cổng web ảo trước khi bật bot
     keep_alive()
+    print("Cổng mạng Render đã mở thành công!")
     print("Bot đang chạy...")
-    bot.polling()
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
