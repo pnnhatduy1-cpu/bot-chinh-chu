@@ -1,8 +1,7 @@
 import telebot
 import requests
-from PIL import Image
-import io
 import os
+import time
 from flask import Flask
 from threading import Thread
 
@@ -11,7 +10,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot hoạt động mượt mà không tốn RAM!"
+    return "Bot làm nét ảnh AI đang chạy mượt mà!"
 
 def run():
     port = int(os.environ.get("PORT", 10000))
@@ -23,69 +22,72 @@ def keep_alive():
 # ----------------------------------
 
 TOKEN = '8819000463:AAEPXP-1NEm6o9fBCNZTToWg2LIU42g7LoU'
-BACKGROUND_PATH = 'IMG_202606271421010.JPG' 
-REMOVE_BG_API_KEY = 'HVG9v7WgM7hv2RCzkzSabmww'
+
+# ĐÃ TÍCH HỢP MÃ REPLICATE TOKEN CỦA ANH DUY
+REPLICATE_API_TOKEN = 'r8_QDIutZSQhwzFHA7h6CK66CKeGsyevVP2ZePvE'
 
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    bot.send_message(message.chat.id, "Đang xử lý tách nền siêu tốc và căn chỉnh khung hình chuẩn 'Đàn Ông Chỉnh Chu'...")
+    bot.send_message(message.chat.id, "⚡ Bot đã nhận ảnh! Đang gửi lên hệ thống AI xử lý làm nét và phục hồi chi tiết...")
     try:
-        # 1. Tải ảnh từ Telegram
+        # 1. Lấy link ảnh từ Telegram
         file_info = bot.get_file(message.photo[-1].file_id)
         file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
         
-        # 2. Gọi API ngoài tách nền hộ
-        response = requests.post(
-            'https://api.remove.bg/v1.0/removebg',
-            data={'image_url': file_url, 'size': 'auto'},
-            headers={'X-API-Key': REMOVE_BG_API_KEY},
-        )
+        # 2. Cấu hình gửi lệnh sang AI Replicate (Dùng model Real-ESRGAN chuyên phục hồi ảnh vỡ)
+        headers = {
+            "Authorization": f"Token {REPLICATE_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
         
-        if response.status_code == 200:
-            subject_image = Image.open(io.BytesIO(response.content))
-        else:
-            bot.send_message(message.chat.id, "Lỗi hệ thống tách nền, anh kiểm tra tài khoản Remove.bg nhé!")
+        data = {
+            "version": "da23564483510ec89907ee800e4758b10dc9b28bda34241ac363198de7e93737",
+            "input": {
+                "image": file_url,
+                "scale": 2,          # Phóng to và làm nét gấp đôi độ phân giải gốc
+                "face_enhance": True # Tự động tối ưu, làm nét và làm mịn chi tiết da mặt
+            }
+        }
+        
+        response = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=data)
+        prediction = response.json()
+        
+        if response.status_code != 201:
+            bot.send_message(message.chat.id, "❌ Gặp lỗi kết nối với hệ thống AI làm nét. Anh kiểm tra lại tài khoản Replicate nhé.")
             return
-
-        # 3. Tiến hành ghép phôi nền với tỷ lệ MỚI phóng to chủ thể
-        bg_image = Image.open(BACKGROUND_PATH).convert("RGBA")
-        
-        # ĐỔI CHIẾN THUẬT: Ép theo chiều rộng (Người mẫu chiếm 90% bề ngang khung hình để nhìn to, rõ nét)
-        target_width = int(bg_image.width * 0.9)
-        aspect_ratio = subject_image.width / subject_image.height
-        target_height = int(target_width / aspect_ratio)
-        
-        # Khống chế nếu chiều cao sau khi phóng to vượt quá 75% khung hình thì thu lại tí để tránh đè chữ
-        if target_height > bg_image.height * 0.75:
-            target_height = int(bg_image.height * 0.75)
-            target_width = int(target_height * aspect_ratio)
             
-        subject_resized = subject_image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        prediction_id = prediction["id"]
+        status_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
         
-        # Căn giữa theo chiều ngang
-        position_x = (bg_image.width - subject_resized.width) // 2
-        
-        # Đẩy vị trí đứng: Cách đáy một khoảng nhỏ (khoảng 3% chiều cao) giúp bố cục thoáng và sang hơn
-        position_y = bg_image.height - subject_resized.height - int(bg_image.height * 0.03)
-        
-        bg_image.paste(subject_resized, (position_x, position_y), mask=subject_resized)
-        
-        final_image = bg_image.convert("RGB")
-        bio = io.BytesIO()
-        bio.name = 'thanh_pham.jpg'
-        final_image.save(bio, 'JPEG', quality=95)
-        bio.seek(0)
-        
-        # Gửi ảnh thành phẩm thẳng vào phòng chat
-        bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥 Chuẩn đẹp trai chỉnh chu nhé!")
-        print("Xử lý thành công hoàn toàn!")
-        
+        # 3. Vòng lặp chờ AI xử lý (Thường chỉ mất từ 3 - 6 giây)
+        start_time = time.time()
+        while True:
+            # Kiểm tra xem tài khoản mới tạo có bị bắt đợi lâu không
+            if time.time() - start_time > 60: 
+                bot.send_message(message.chat.id, "⏱️ Hệ thống AI đang bận xếp hàng xử lý, anh đợi thêm một chút nhé...")
+                start_time = time.time() # reset thời gian thông báo
+                
+            status_response = requests.get(status_url, headers=headers)
+            status_data = status_response.json()
+            
+            if status_data["status"] == "succeeded":
+                output_url = status_data["output"]
+                # Trả ảnh siêu nét về phòng chat Telegram cho anh Duy
+                bot.send_photo(message.chat.id, output_url, caption="Ảnh của anh đã được AI phục hồi làm nét căng! 🔥 Super Clean!")
+                print("Làm nét ảnh thành công hoàn toàn!")
+                break
+            elif status_data["status"] == "failed":
+                bot.send_message(message.chat.id, "❌ AI xử lý làm nét tấm ảnh này bị thất bại. Anh thử tấm khác xem sao.")
+                break
+                
+            time.sleep(2) # Cứ 2 giây kiểm tra trạng thái 1 lần
+            
     except Exception as e:
-        bot.send_message(message.chat.id, f"Gặp lỗi rồi anh ơi: {str(e)}")
+        bot.send_message(message.chat.id, f"Gặp lỗi hệ thống: {str(e)}")
 
 if __name__ == "__main__":
     keep_alive()
-    print("Bot đang sẵn sàng lắng nghe...")
+    print("Bot làm nét ảnh AI đang sẵn sàng lắng nghe...")
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
