@@ -24,22 +24,20 @@ def keep_alive():
 
 TOKEN = '8819000463:AAEPXP-1NEm6o9fBCNZTToWg2LIU42g7LoU'
 BACKGROUND_PATH = 'IMG_202606271421010.JPG' 
-
-# ĐÃ TÍCH HỢP API KEY CỦA ANH DUY
 REMOVE_BG_API_KEY = 'HVG9v7WgM7hv2RCzkzSabmww'
 
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    bot.reply_to(message, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
+    # Dùng send_message gửi thẳng vào chat để không bị lỗi trích dẫn 400
+    bot.send_message(message.chat.id, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
     try:
         # 1. Tải ảnh từ Telegram
         file_info = bot.get_file(message.photo[-1].file_id)
         file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
         
-        # 2. Gọi API ngoài tách nền hộ (Không tốn RAM của Render)
-        print("Đang gửi ảnh sang hệ thống tách nền...")
+        # 2. Gọi API ngoài tách nền hộ
         response = requests.post(
             'https://api.remove.bg/v1.0/removebg',
             data={'image_url': file_url, 'size': 'auto'},
@@ -49,11 +47,10 @@ def handle_photo(message):
         if response.status_code == 200:
             subject_image = Image.open(io.BytesIO(response.content))
         else:
-            bot.reply_to(message, "Lỗi hệ thống tách nền, anh kiểm tra tài khoản Remove.bg nhé!")
+            bot.send_message(message.chat.id, "Lỗi hệ thống tách nền, anh kiểm tra tài khoản Remove.bg nhé!")
             return
 
-        # 3. Tiến hành ghép phôi nền như cũ
-        print("Đang dán vào phôi nền...")
+        # 3. Tiến hành ghép phôi nền
         bg_image = Image.open(BACKGROUND_PATH).convert("RGBA")
         
         target_height = int(bg_image.height * 0.7)
@@ -77,11 +74,12 @@ def handle_photo(message):
         final_image.save(bio, 'JPEG', quality=95)
         bio.seek(0)
         
+        # Gửi ảnh thành phẩm thẳng vào phòng chat
         bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥")
         print("Xử lý thành công hoàn toàn!")
         
     except Exception as e:
-        bot.reply_to(message, f"Gặp lỗi rồi anh ơi: {str(e)}")
+        bot.send_message(message.chat.id, f"Gặp lỗi rồi anh ơi: {str(e)}")
 
 if __name__ == "__main__":
     keep_alive()
