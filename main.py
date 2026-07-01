@@ -30,8 +30,7 @@ bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    # Dùng send_message gửi thẳng vào chat để không bị lỗi trích dẫn 400
-    bot.send_message(message.chat.id, "Đang xử lý tách nền siêu tốc và phối vào khung 'Đàn Ông Chỉnh Chu'...")
+    bot.send_message(message.chat.id, "Đang xử lý tách nền siêu tốc và căn chỉnh khung hình chuẩn 'Đàn Ông Chỉnh Chu'...")
     try:
         # 1. Tải ảnh từ Telegram
         file_info = bot.get_file(message.photo[-1].file_id)
@@ -50,21 +49,26 @@ def handle_photo(message):
             bot.send_message(message.chat.id, "Lỗi hệ thống tách nền, anh kiểm tra tài khoản Remove.bg nhé!")
             return
 
-        # 3. Tiến hành ghép phôi nền
+        # 3. Tiến hành ghép phôi nền với tỷ lệ MỚI phóng to chủ thể
         bg_image = Image.open(BACKGROUND_PATH).convert("RGBA")
         
-        target_height = int(bg_image.height * 0.7)
+        # ĐỔI CHIẾN THUẬT: Ép theo chiều rộng (Người mẫu chiếm 90% bề ngang khung hình để nhìn to, rõ nét)
+        target_width = int(bg_image.width * 0.9)
         aspect_ratio = subject_image.width / subject_image.height
-        target_width = int(target_height * aspect_ratio)
+        target_height = int(target_width / aspect_ratio)
         
-        if target_width > bg_image.width * 0.9:
-            target_width = int(bg_image.width * 0.9)
-            target_height = int(target_width / aspect_ratio)
+        # Khống chế nếu chiều cao sau khi phóng to vượt quá 75% khung hình thì thu lại tí để tránh đè chữ
+        if target_height > bg_image.height * 0.75:
+            target_height = int(bg_image.height * 0.75)
+            target_width = int(target_height * aspect_ratio)
             
         subject_resized = subject_image.resize((target_width, target_height), Image.Resampling.LANCZOS)
         
+        # Căn giữa theo chiều ngang
         position_x = (bg_image.width - subject_resized.width) // 2
-        position_y = bg_image.height - subject_resized.height 
+        
+        # Đẩy vị trí đứng: Cách đáy một khoảng nhỏ (khoảng 3% chiều cao) giúp bố cục thoáng và sang hơn
+        position_y = bg_image.height - subject_resized.height - int(bg_image.height * 0.03)
         
         bg_image.paste(subject_resized, (position_x, position_y), mask=subject_resized)
         
@@ -75,7 +79,7 @@ def handle_photo(message):
         bio.seek(0)
         
         # Gửi ảnh thành phẩm thẳng vào phòng chat
-        bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥")
+        bot.send_photo(message.chat.id, bio, caption="Lên đồ xong rồi anh Duy ơi! 🔥 Chuẩn đẹp trai chỉnh chu nhé!")
         print("Xử lý thành công hoàn toàn!")
         
     except Exception as e:
